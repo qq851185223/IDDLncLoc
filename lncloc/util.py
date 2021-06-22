@@ -5,7 +5,7 @@ from sklearn.metrics import accuracy_score
 from tensorflow.python.keras.layers import Dense,Dropout,Layer,Lambda,Conv2D,Concatenate,multiply,MaxPooling2D,Flatten
 from tensorflow.python.keras.models import Sequential
 from tensorflow.python.keras import backend as K
-from AFCNN.loss import MyLoss
+from model.loss import MyLoss
 from sklearn import clone
 def dataset_split(data,label):
     c_data = []
@@ -69,8 +69,10 @@ class SpatialAttention(Layer):
     def __init__(self):
         super().__init__()
 
-    def __call__(self, input_feature):
-        kernel_size = 7
+    def build(self, input_shape):
+        super(SpatialAttention, self).build(input_shape)
+    def call(self, input_feature):
+        kernel_size = 3
 
         # if K.image_data_format() == "channels_first":
         #     channel = input_feature._keras_shape[1]
@@ -79,45 +81,63 @@ class SpatialAttention(Layer):
         #     channel = input_feature._keras_shape[-1]
         cbam_feature = input_feature
 
+        print(input_feature.shape)
         avg_pool = Lambda(lambda x: K.mean(x, axis=3, keepdims=True))(cbam_feature)
-        #assert avg_pool._keras_shape[-1] == 1
+        #         # assert avg_pool._keras_shape[-1] == 1
+        #print(avg_pool.shape)
         max_pool = Lambda(lambda x: K.max(x, axis=3, keepdims=True))(cbam_feature)
-        #assert max_pool._keras_shape[-1] == 1
+
+        #print(max_pool.shape)
+        # assert max_pool._keras_shape[-1] == 1
         concat = Concatenate(axis=3)([avg_pool, max_pool])
-        #assert concat._keras_shape[-1] == 2
+        #print(concat.shape)
+        # assert concat._keras_shape[-1] == 2
         cbam_feature = Conv2D(filters=1,
                               kernel_size=kernel_size,
-                              activation='hard_sigmoid',
                               strides=1,
                               padding='same',
                               kernel_initializer='he_normal',
                               use_bias=False)(concat)
-        #assert cbam_feature._keras_shape[-1] == 1
+        # assert cbam_feature._keras_shape[-1] == 1
 
-        #if K.image_data_format() == "channels_first":
+        # if K.image_data_format() == "channels_first":
         #    cbam_feature = Permute((3, 1, 2))(cbam_feature)
-
-        return multiply([input_feature, cbam_feature])
+        print(cbam_feature.shape)
+        res = K.sigmoid(cbam_feature)
+        #print(res.shape)
+        return res
 
 def create_model():
-    #CNN模型
+    # model = Sequential()
+    # input_dim = x.shape[1]
+    # nb_classes = 4
+    # model.add(Dense(4096, input_dim=input_dim, activation='relu', name='input'))
+    # model.add(Dropout(0.5))
+    # model.add(Dense(1024, activation='relu', name='fc1'))
+    # model.add(Dropout(0.5))
+    # model.add(Dense(256, activation='relu', name='fc2'))
+    # model.add(Dropout(0.5))
+    # model.add(Dense(nb_classes, activation='softmax', name='output'))
+    # loss = MyLoss()
+    # model.compile(loss=loss.loss_func,
+    #               optimizer='nadam',
+    #               metrics=['acc'])
     model = Sequential()
     model.add(Conv2D(8, (1, 4), activation='relu', input_shape=(1, 4144, 1)))
-    # model.add(MaxPooling2D(pool_size=(1, 2)))
+    #model.add(MaxPooling2D(pool_size=(1, 2)))
     model.add(SpatialAttention())
-    #model.add(Dropout(0.5))
     model.add(Conv2D(16, (1, 4), activation='relu'))
     # model.add(MaxPooling2D(pool_size=(1, 2)))
     # model.add(Conv2D(150, (1, 3), activation='relu'))
     model.add(MaxPooling2D(pool_size=(1, 2)))
     #model.add(SpatialAttention())
-    #model.add(Dropout(0.5))
     model.add(Flatten())
 
     model.add(Dense(64, activation='relu'))
 
     model.add(Dense(int(4), activation='softmax'))
 
-    model.compile(loss=MyLoss().loss_func, optimizer='adam', metrics=['accuracy'])#加入focal_loss
+    model.compile(loss=MyLoss().loss_func, optimizer='adam', metrics=['accuracy'])
     #model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+    print(model.summary())
     return model
